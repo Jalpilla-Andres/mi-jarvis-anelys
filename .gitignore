@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.jarvis-progress.json
+*.log
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎙️ Anelys Voice</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 90%;
+    }
+    h1 { color: #333; margin-bottom: 10px; text-align: center; }
+    .subtitle { color: #666; text-align: center; margin-bottom: 40px; font-size: 14px; }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    button {
+      flex: 1;
+      padding: 15px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    #recordBtn {
+      background: #667eea;
+      color: white;
+    }
+    #recordBtn:hover:not(:disabled) { background: #5568d3; }
+    #recordBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    #stopBtn {
+      background: #f97316;
+      color: white;
+      display: none;
+    }
+    #stopBtn:hover { background: #ea580c; }
+    
+    #status {
+      text-align: center;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+    #status.info { background: #dbeafe; color: #1e40af; }
+    #status.success { background: #dcfce7; color: #166534; }
+    #status.error { background: #fee2e2; color: #991b1b; }
+    
+    #transcript { 
+      background: #f3f4f6; 
+      padding: 15px; 
+      border-radius: 10px; 
+      margin-bottom: 15px;
+      font-size: 14px;
+      display: none;
+      border-left: 4px solid #667eea;
+    }
+    
+    #response {
+      background: #f0f9ff;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      font-size: 14px;
+      display: none;
+      border-left: 4px solid #0ea5e9;
+      line-height: 1.6;
+    }
+    
+    #audioResponse {
+      width: 100%;
+      margin-top: 15px;
+      display: none;
+    }
+    
+    .timer {
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: #667eea;
+      margin-bottom: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎙️ Anelys Voice</h1>
+    <p class="subtitle">Presiona para hablar. Anelys responde.</p>
+    
+    <div class="timer" id="timer">0:00</div>
+    
+    <div class="button-group">
+      <button id="recordBtn">Presiona para grabar</button>
+      <button id="stopBtn">Detener</button>
+    </div>
+    
+    <div id="status"></div>
+    <div id="transcript"></div>
+    <div id="response"></div>
+    <audio id="audioResponse" controls></audio>
+  </div>
+
+  <script>
+    const recordBtn = document.getElementById('recordBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusDiv = document.getElementById('status');
+    const transcriptDiv = document.getElementById('transcript');
+    const responseDiv = document.getElementById('response');
+    const audioElement = document.getElementById('audioResponse');
+    const timerDiv = document.getElementById('timer');
+    
+    let mediaRecorder;
+    let audioChunks = [];
+    let timerInterval;
+    let seconds = 0;
+    
+    const TRIGGER_SECRET = 'ea062152ce3a9170cb43e09d68331a8b340c96a05fe1e7f106ce95f086b6385f';
+    const API_URL = 'http://localhost:3141';
+    
+    recordBtn.addEventListener('click', async () => {
+      audioChunks = [];
+      seconds = 0;
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = (event) => {
+          audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = handleRecordingStop;
+        
+        mediaRecorder.start();
+        recordBtn.style.display = 'none';
+        stopBtn.style.display = 'flex';
+        timerDiv.style.display = 'block';
+        
+        // Timer
+        timerInterval = setInterval(() => {
+          seconds++;
+          const mins = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          timerDiv.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }, 1000);
+        
+        showStatus('Grabando...', 'info');
+      } catch (error) {
+        showStatus('Error: No se puede acceder al micrófono', 'error');
+      }
+    });
+    
+    stopBtn.addEventListener('click', () => {
+      mediaRecorder.stop();
+      recordBtn.style.display = 'flex';
+      stopBtn.style.display = 'none';
+      timerDiv.style.display = 'none';
+      clearInterval(timerInterval);
+      showStatus('Procesando...', 'info');
+    });
+    
+    async function handleRecordingStop() {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+      
+      try {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'audio.wav');
+        
+        const response = await fetch(`${API_URL}/api/voice/turn`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${TRIGGER_SECRET}`
+          },
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        // Obtener headers de respuesta
+        const transcript = response.headers.get('x-transcript') || '';
+        const responseText = response.headers.get('x-response') || '';
+        
+        // Reproducir audio
+        const audioData = await response.arrayBuffer();
+        const audioUrl = URL.createObjectURL(new Blob([audioData], { type: 'audio/mpeg' }));
+        audioElement.src = audioUrl;
+        audioElement.style.display = 'block';
+        audioElement.play();
+        
+        // Mostrar resultados
+        if (transcript) {
+          transcriptDiv.innerHTML = `<strong>📝 Tú:</strong> ${transcript}`;
+          transcriptDiv.style.display = 'block';
+        }
+        
+        if (responseText) {
+          responseDiv.innerHTML = `<strong>🤖 Anelys:</strong> ${responseText}`;
+          responseDiv.style.display = 'block';
+        }
+        
+        showStatus('✅ Completo', 'success');
+      } catch (error) {
+        showStatus(`Error: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+    
+    function showStatus(message, type) {
+      statusDiv.textContent = message;
+      statusDiv.className = type;
+      statusDiv.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

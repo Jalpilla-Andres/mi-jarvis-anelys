@@ -11,13 +11,9 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 
   try {
     log("🎙️ Transcribiendo audio con Whisper...");
-
-    // Guardar buffer a archivo temporal
     writeFileSync(tempFile, audioBuffer);
-
-    // Leer y transcribir
+    
     const fileStream = createReadStream(tempFile);
-
     const response = await openai.audio.transcriptions.create({
       file: fileStream as any,
       model: "whisper-1",
@@ -32,23 +28,17 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
   } finally {
     try {
       unlinkSync(tempFile);
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 }
 
 export async function synthesizeVoice(text: string): Promise<Buffer> {
   try {
-    log(`🔊 Sintetizando voz para: "${text.substring(0, 50)}..."`);
-
+    log(`🔊 Sintetizando voz...`);
     const apiKey = process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) {
-      throw new Error("ELEVENLABS_API_KEY not set");
-    }
+    if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
 
     const voiceId = "21m00Tcm4TlvDq8ikWAM";
-
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
@@ -60,22 +50,14 @@ export async function synthesizeVoice(text: string): Promise<Buffer> {
         body: JSON.stringify({
           text,
           model_id: "eleven_monolingual_v1",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-          },
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
         }),
       }
     );
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`ElevenLabs error: ${error}`);
-    }
-
+    if (!response.ok) throw new Error(`ElevenLabs: ${await response.text()}`);
     const audioBuffer = await response.arrayBuffer();
-    log(`✅ Audio sintetizado: ${audioBuffer.byteLength} bytes`);
-
+    log(`✅ Audio: ${audioBuffer.byteLength} bytes`);
     return Buffer.from(audioBuffer);
   } catch (error) {
     logError("Error en synthesizeVoice", error);

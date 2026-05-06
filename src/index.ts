@@ -4,6 +4,8 @@ import { serve } from "@hono/node-server";
 import { readFileSync } from "fs";
 import { askAnelys } from "./brain.js";
 import { log, logError } from "./lib/logger.js";
+import { startWatchdog } from "./cron/watchdog.js";
+import { startRituals } from "./cron/rituals.js";
 import voiceRouter from "./routes/voice.js";
 import telegramRouter from "./routes/telegram.js";
 
@@ -27,25 +29,20 @@ app.get("/health", (c) => {
   });
 });
 
-// Chat endpoint (texto)
+// Chat endpoint
 app.post("/api/chat", async (c) => {
   const auth = c.req.header("Authorization");
-
   if (auth !== `Bearer ${TRIGGER_SECRET}`) {
     log("Intento de acceso no autorizado", "warn");
     return c.json({ error: "Unauthorized" }, 401);
   }
-
   try {
     const body = await c.req.json();
     const message = body.message || "";
-
     if (!message) {
       return c.json({ error: "Message required" }, 400);
     }
-
     const response = await askAnelys(message, OWNER_NAME);
-
     return c.json({
       response,
       timestamp: new Date().toISOString(),
@@ -77,3 +74,9 @@ log(`📍 Health: GET http://localhost:${port}/health`);
 log(`💬 Chat: POST http://localhost:${port}/api/chat`);
 log(`🎙️ Voice: POST http://localhost:${port}/api/voice/turn`);
 log(`📱 Telegram: POST http://localhost:${port}/api/webhook/telegram`);
+
+// Iniciar watchdog
+startWatchdog();
+
+// Iniciar rituals
+startRituals();
